@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { FilterState, MapViewState, Property } from '@/types';
@@ -7,24 +6,6 @@ import PropertyFilters from '@/components/PropertyFilters';
 import { getProperties } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
 import { toast } from 'sonner';
-
-// Mock function to get user-specific properties
-const getUserProperties = async (userId: string, filters: FilterState) => {
-  try {
-    // In a real app, this would call the backend API with user_id and filters
-    // For now, we'll use the existing getProperties function and filter by user_id
-    const allProperties = await getProperties(filters);
-    
-    // Mock data: Make some properties belong to the current user
-    return allProperties.map((property: Property, index: number) => ({
-      ...property,
-      user_id: index % 3 === 0 ? userId : `other-user-${index % 5}`
-    })).filter((p: Property) => p.user_id === userId);
-  } catch (error) {
-    console.error('Error fetching user properties:', error);
-    throw error;
-  }
-};
 
 const MapView = () => {
   const { user } = useAuth();
@@ -40,25 +21,27 @@ const MapView = () => {
     zoom: 4,
   });
 
-  // Fetch user-specific properties with the current filters
+  // Fetch properties with user-specific query
   const { data: properties, isLoading, error, refetch } = useQuery({
-    queryKey: ['userProperties', user?.id, filters],
-    queryFn: () => user ? getUserProperties(user.id, filters) : [],
-    enabled: !!user?.id,
-    meta: {
-      onError: (err: any) => {
-        console.error('Error fetching properties:', err);
-        toast.error('Failed to load property data');
+    queryKey: ['properties', user?.id, filters],
+    queryFn: async () => {
+      if (!user?.id) return [];
+      try {
+        return await getProperties(filters);
+      } catch (error) {
+        console.error('Error fetching properties:', error);
+        throw error;
       }
-    }
+    },
+    enabled: !!user?.id,
   });
 
-  // Re-fetch when filters change
+  // Handle errors with toast notifications
   useEffect(() => {
-    if (user?.id) {
-      refetch();
+    if (error) {
+      toast.error('Failed to load properties. Please try again.');
     }
-  }, [filters, refetch, user?.id]);
+  }, [error]);
 
   const handleFiltersChange = (newFilters: FilterState) => {
     setFilters(newFilters);
@@ -68,7 +51,7 @@ const MapView = () => {
     setMapViewState(viewState);
   };
 
-  // If there's an error, show an error message
+  // Show error state
   if (error) {
     return (
       <div className="h-full flex items-center justify-center">
